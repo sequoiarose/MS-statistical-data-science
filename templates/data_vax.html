@@ -1,0 +1,24 @@
+{% extends "home.html" %}
+{% block content %}
+<table class="table">
+  <thead>
+    <tr>
+      <th scope="col">Vaccine ID</th>
+      <th scope="col">Vaccine Date</th>
+      <th scope="col">Vaccine Type</th>
+      <th scope="col">Pet ID</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for row in data %}
+    <tr>
+      <th scope="row">{{row[0]}}</th>
+      {% for ind in range(1, row|length) %}
+      <td>{{row[ind]}}</td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% endblock content %}

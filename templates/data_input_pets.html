@@ -1,0 +1,45 @@
+{% extends "home.html" %}
+{% block content %}
+<form method="POST">
+  <div class="form-group">
+    <label for="first_name">First Name</label>
+    <input type="text" class="form-control" id="first_name" placeholder="" name="first_name">
+  </div>
+  <div class="form-group">
+    <label for="last_name">Last Name</label>
+    <input type="text" class="form-control" id="last_name" placeholder="" name="last_name">
+  </div>
+  <div class="form-group">
+    <label for="gender">Gender</label>
+    <input type="text" class="form-control" id="gender" placeholder="" name="gender">
+  </div>
+  <div class="form-group">
+    <label for="weight">Weight</label>
+    <input type="text" class="form-control" id="weight" placeholder="" name="weight">
+  </div>
+  <div class="form-group">
+    <label for="age">Age</label>
+    <input type="text" class="form-control" id="age" placeholder="" name="age">
+  </div>
+  <div class="form-group">
+    <label for="species">Species</label>
+    <input type="text" class="form-control" id="species" placeholder="" name="species">
+  </div>
+  <div class="form-group">
+    <label for="breed">Breed</label>
+    <input type="text" class="form-control" id="breed" placeholder="" name="breed">
+  </div>
+  <div class="form-group">
+    <label for="owner">Owner ID</label>
+    <select type="text" class="form-control" id="owner" placeholder="" name="owner">
+     {% for o in owners %}
+     <option>{{o[0]}}</option>
+     {% endfor %}
+      </select>
+  </div>
+  
+  <button type="submit" class="btn btn-primary">Submit</button>
+  
+</form>
+
+{% endblock content %}

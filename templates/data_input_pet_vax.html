@@ -1,0 +1,19 @@
+{% extends "home.html" %}
+{% block content %}
+<form method="POST">
+  <div class="form-group">
+    <label for="vaccine">Vaccine</label>
+    <input type="text" class="form-control" id="vaccine" placeholder="" name="vaccine">
+  </div>
+  <div class="form-group">
+    <label for="pet">Pet</label>
+    <input type="text" class="form-control" id="pet" placeholder="" name="pet">
+  </div>
+  <div class="form-group">
+    <label for="vax_date">Vaccine Date</label>
+    <input type="text" class="form-control" id="vax_date" placeholder="" name="vax_date">
+  </div>
+  <button type="submit" class="btn btn-primary">Submit</button>
+</form>
+
+{% endblock content %}
