@@ -1,0 +1,298 @@
+---
+title: "Categorical Data Analysis Project: Predicting Tree Mortality in Sequoia National Park"
+author: "Sequoia Andrade"
+date: "May 18th, 2023"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(fig.width = 10, fig.height = 5, echo = TRUE)
+library(knitr)
+```
+
+# 1. State the problem and describe the data set
+
+Wildfires are becoming increasing frequent and severe, in part due to anthropogenic climate change. Each wildfire is unique, yet in some cases established trees survive post fire while other dies. To recognize which regions and forests are at higher risk of detrimental impacts due to wildfire, factors contributing to tree mortality after a fire should be identified. In this project, factors contributing to tree death post fire are analyzed through a logistic regression with tree mortality as the target. 
+
+The data set used in this project is the "Sequoia and Yosemite National Parks Mortality and Fire Data (1990-2019) for Competition-Fire-Drought Interaction Analysis" data, abbreviated as SNFDP. The data set has a row for each individual tree and targets information relevant to tree mortality. The data set consists of 5674 rows of tree data spanning from 1990 to 2019. There are many variables, including fire year, forest plot, tree species, mortality date, tree diameter, crown scorch percentage (CSV), mortality after 3 years, mortality after 5 years, neighbors within 15m, neighbors within 5 meters, same species neighbors within 15 meters, same species neighbor within 5 meters, closed neighbor, the Hegyi competition index, and basal area of neighboring trees. Tree mortality after 3 years is considered the binary target, with 0 indicating no mortality and 1 indicating mortality. After an initial analysis, the fire year and plot are deemed multicollinear, with each plot only having one year of data, so the forest plot is removed from the model. The remaining predictor variables are tested for the full model.
+
+```{r}
+snfdp = read.csv("SNFDP_firecompetition.csv", header=TRUE)
+#remove na
+snfdp = subset(snfdp, select = -c(PLOT, POST_FIRE_BEETLE_MORT_5yr, MORT_DATE))
+snfdp = na.omit(snfdp)
+summary(snfdp)
+```
+
+```{r}
+# building training and testing set
+set.seed(1)
+train_ind = sample(4540) # 80 % of the set
+train = snfdp[train_ind,]
+val = snfdp[-train_ind,]
+```
+
+# 2. Fit a logistic regression model with all predictors
+
+```{r}
+mdl.full = glm(FIRE_MORT_0_to_3_yr~.,family=binomial(), data=train)
+summary(mdl.full)
+```
+The full model identifies fire year, species, diameter, CSV, neighbors within a 15 m distance, HEGYI, basal area of neighboring trees of the same species within a 15 m distance, and basal area of all neighboring trees within a 15 m distance as significant. The other non-significant predictors are removed.
+
+
+# 3. Select the best subset of variables. Perform a diagnostic on the best model.  Perform all possible inferences you can think about.
+
+```{r}
+drop1(mdl.full, test="LRT")
+```
+
+
+```{r}
+mdl.best = glm(FIRE_MORT_0_to_3_yr~Fire_Year+SPECIES+DBH+CVS+N.neighbors.15m+HEGYI+BA.conspecifics.15m+BA.conspecifics.5m+BA.15m, family=binomial(), data=train)
+summary(mdl.best)
+```
+
+```{r}
+anova(mdl.full, mdl.best, test="LRT")
+```
+
+The best model is not significantly different from the full model
+
+```{r}
+drop1(mdl.best, test="LRT")
+```
+```{r}
+mdl.null = glm(FIRE_MORT_0_to_3_yr~1, family=binomial(), data=train)
+anova(mdl.best, mdl.null, test="LRT")
+```
+The model is significantly different from the null model and is a good fit.
+
+
+```{r}
+step(mdl.full)
+```
+```{r}
+mdl.best.step = glm(formula = FIRE_MORT_0_to_3_yr ~ Fire_Year + SPECIES + DBH + 
+    CVS + N.neighbors.15m + HEGYI + BA.conspecifics.5m + BA.conspecifics.15m + 
+    BA.8m + BA.15m, family = binomial(), data = train)
+summary(mdl.best.step)
+anova(mdl.best.step, mdl.best, test="LRT")
+```
+
+From using the step function, we get a different model with the BA.8m predictor added in. This new model is significantly different from the manual model, with the manual model having a slightly larger deviance and AIC. The final model chosen is the model from the step function:
+```{r}
+mdl.final = glm(formula = FIRE_MORT_0_to_3_yr ~ Fire_Year + SPECIES + DBH + 
+    CVS + N.neighbors.15m + HEGYI + BA.conspecifics.5m + BA.conspecifics.15m + 
+    BA.8m + BA.15m, family = binomial(), data = train)
+mdl.summary = summary(mdl.final)
+```
+
+The model fit can be examined using the residuals, where the majority of the data is falling in a range with standard residuals less than 2:
+
+```{r}
+residuals=data.frame(rstandard(mdl.final,type="pearson"), residuals(mdl.final, type="pearson"),
+                residuals(mdl.final,type="deviance"), rstandard(mdl.final,type="deviance"))
+names(residuals)=cbind("standardized", "Pearson", "deviance", "std. dev")
+boxplot(residuals,  ylim = c(-5, 5))
+```
+
+Inference for the multiplicative effect of the predictors is performed by finding the 95% confidence interval for each coefficient, as well as the confidence interval for the effect :
+
+
+```{r}
+alpha=0.05
+betas = c()
+lower_beta = c()
+upper_beta = c()
+ebetas = c()
+lower_ebeta = c()
+upper_ebeta = c()
+for(i in 2:nrow(mdl.summary$coef)){
+  betas[i-1] = mdl.summary$coef[i,1]
+  ci_wald=c(mdl.summary$coef[i,1]-qnorm(1-alpha/2)* mdl.summary$coef[i,2], mdl.summary$coef[i,1]+qnorm(1-alpha/2)* mdl.summary$coef[i,2])
+  lower_beta[i-1] = ci_wald[1]
+  upper_beta[i-1] = ci_wald[2]
+  ebetas[i-1] = exp(mdl.summary$coef[i,1])
+  eci_wald = exp((ci_wald=c(mdl.summary$coef[i,1]-qnorm(1-alpha/2)* mdl.summary$coef[i,2], mdl.summary$coef[i,1]+qnorm(1-alpha/2)* mdl.summary$coef[i,2]))
+)
+  lower_ebeta[i-1] = eci_wald[1]
+  upper_ebeta[i-1] = eci_wald[2]
+  
+}
+inference = data.frame(betas, lower_beta, upper_beta, ebetas, lower_ebeta, upper_ebeta, row.names = row.names(mdl.summary$coef)[-1])
+inference
+```
+From the inference table, we can see that the pinus species has the largest impact on mortality probability, with the odds of mortality for pinus trees 2.465 times the odds for non-pinus species. The basal area of same trees in a 15 m radius also has a large impact, with the odds of mortality increasing by 1.411 times for each one unit increase in basal area. The CSV, a measure of fire intensity, has the next largest impact, the the odds of mortality increasing by 1.058 times for each unit increase in crown scorch. Fire year also has a positive multiplicative effect, with the odds of mortality increasing by 1.048 for each year increase. The Hegyi competition metric has a small multiplicative effect, with each one unit increase resulting in a 1.01 times increase in the odds of mortality. The remaining predictors have a negative coefficient, indicating increases in the predictor value result in decreases in the odds of mortality. Calocedrus decurrens (Cade) and Quercus kelloggii (QUKE) species have 0.785 and 0.546 odds of mortality respectively than trees that are neither. For each one centimeter increase in tree diameter, the odds of mortality decrease by 0.965 times. The number of neighbors in a 15m range results in a 0.992 times decrease in odds of mortality for each 1 neighbor increase. The basal area of same species trees with a 15 m radius decreases the odds of mortality by 0.902 times for each one unit increase in basal area.
+
+# 4. Use the new model to make predictions.
+
+```{r}
+preds = predict(mdl.final,newdata=val, type="response")
+prop = 0.5
+yy <- val$FIRE_MORT_0_to_3_yr
+yhat <- as.numeric(preds >prop)
+confusion <- table(yy, yhat)
+confusion
+```
+
+```{r}
+confusion[1,1]/(confusion[1,1]+confusion[1,2])
+confusion[2,2]/(confusion[2,1]+confusion[2,2])
+(confusion[1,1]+confusion[2,2])/(confusion[1,1]+confusion[1,2]+confusion[2,1]+confusion[2,2])
+```
+
+When p=0.5, the model has a specificity of 0.783, sensitivity of 0.969, and accuracy of 0.926.
+
+# 5. Use different pi_0 as a cut-off point and create a confusion table.
+```{r}
+p_0s = c(0.25, 0.4, 0.5, 0.6, 0.75, 0.85, 0.9)
+specificity = c()
+sensitivity = c()
+accuracy = c()
+preds = predict(mdl.final,newdata=val, type="response")
+for (i in 1: length(p_0s)){
+  prop = p_0s[i]
+  yy <- val$FIRE_MORT_0_to_3_yr
+  yhat <- as.numeric(preds >prop)
+  confusion <- table(yy, yhat)
+  print("cutoff value: ")
+  print(prop)
+  print(confusion)
+  specificity[i] = confusion[1,1]/(confusion[1,1]+confusion[1,2])
+  sensitivity[i] = confusion[2,2]/(confusion[2,1]+confusion[2,2])
+  accuracy[i] = (confusion[1,1]+confusion[2,2])/(confusion[1,1]+confusion[1,2]+confusion[2,1]+confusion[2,2])
+}
+
+cutoffs <- data.frame(p_0s, specificity, sensitivity, accuracy)
+cutoffs
+```
+
+
+# 6. Perform visualization of data and models.  
+```{r}
+library(ggeffects)
+library(patchwork)
+continuous = c("Fire_Year", "DBH", "CVS", "N.neighbors.15m", "HEGYI", "BA.conspecifics.5m", "BA.conspecifics.15m", "BA.8m", "BA.15m")
+plts = lapply(continuous,function(i){
+       return(plot(ggpredict(mdl.final,i)))
+       })
+
+wrap_plots(plts)
+```
+```{r}
+plot(ggpredict(mdl.final,"SPECIES"))
+```
+
+
+# 7. Plot the ROC curve, find AUC, and the best cutoff point for classification.
+
+the AUC is 0.975 with the best cutoff point of $\pi_0=0.912$
+
+```{r}
+library(Epi)
+ROC(form=FIRE_MORT_0_to_3_yr ~ Fire_Year + SPECIES + DBH + 
+    CVS + N.neighbors.15m + HEGYI + BA.conspecifics.5m + BA.conspecifics.15m + 
+    BA.8m + BA.15m,plot="ROC", data=train)
+```
+```{r}
+preds = predict(mdl.final,newdata=val, type="response")
+prop = 0.912
+yy <- val$FIRE_MORT_0_to_3_yr
+yhat <- as.numeric(preds >prop)
+confusion <- table(yy, yhat)
+confusion
+
+
+confusion[1,1]/(confusion[1,1]+confusion[1,2])
+confusion[2,2]/(confusion[2,1]+confusion[2,2])
+(confusion[1,1]+confusion[2,2])/(confusion[1,1]+confusion[1,2]+confusion[2,1]+confusion[2,2])
+```
+
+
+# 8. Perform LOOCV and k-fold cross-validation.
+```{r}
+#LOOCV - takes a while to run
+prop=0.5
+pihat <- vector(length=nrow(snfdp))
+for (i in 1:nrow(snfdp)) {
+  pihat[i] <-
+    predict(update(mdl.final, subset=-i),
+            newdata=snfdp[i,], type="response")
+}
+
+yy <- as.numeric(snfdp$FIRE_MORT_0_to_3_yr > 0)
+yhat <- as.numeric(pihat >prop)
+confusion <- table(yy, yhat)
+confusion
+```
+```{r}
+confusion[1,1]/(confusion[1,1]+confusion[1,2])
+confusion[2,2]/(confusion[2,1]+confusion[2,2])
+(confusion[1,1]+confusion[2,2])/(confusion[1,1]+confusion[1,2]+confusion[2,1]+confusion[2,2])
+```
+
+```{r}
+# k-fold K=10
+library(lattice)
+library(DAAG)
+cv.binary(mdl.final)
+```
+
+# 9. Try the probit link and the identity links to model data. 
+
+```{r}
+# probit
+mdl.probit = glm(FIRE_MORT_0_to_3_yr ~ Fire_Year + SPECIES + DBH + 
+    CVS + N.neighbors.15m + HEGYI + BA.conspecifics.5m + BA.conspecifics.15m + 
+    BA.8m + BA.15m, family=binomial(link="probit"), data = train)
+summary(mdl.probit)
+
+preds = predict(mdl.probit, newdata=val, type="response")
+prop = 0.912
+yy <- val$FIRE_MORT_0_to_3_yr
+yhat <- as.numeric(preds >prop)
+confusion <- table(yy, yhat)
+confusion
+
+
+confusion[1,1]/(confusion[1,1]+confusion[1,2])
+confusion[2,2]/(confusion[2,1]+confusion[2,2])
+(confusion[1,1]+confusion[2,2])/(confusion[1,1]+confusion[1,2]+confusion[2,1]+confusion[2,2])
+```
+
+```{r}
+# identity
+mdl.identity = glm(FIRE_MORT_0_to_3_yr ~ Fire_Year + SPECIES + DBH + 
+    CVS + N.neighbors.15m + HEGYI + BA.conspecifics.5m + BA.conspecifics.15m + 
+    BA.8m + BA.15m, family=binomial(link="identity"), data = train, start=c(-0.5,0.05,-0.5,0.5,-0.5,-0.05, 0.05, -0.005, 0.005, 0.5, -0.05, 0.05, 0.05))
+summary(mdl.identity)
+
+preds = predict(mdl.identity,newdata=val, type="response")
+prop = 0.912
+yy <- val$FIRE_MORT_0_to_3_yr
+yhat <- as.numeric(preds >prop)
+confusion <- table(yy, yhat)
+confusion
+
+
+confusion[1,1]/(confusion[1,1]+confusion[1,2])
+confusion[2,2]/(confusion[2,1]+confusion[2,2])
+(confusion[1,1]+confusion[2,2])/(confusion[1,1]+confusion[1,2]+confusion[2,1]+confusion[2,2])
+```
+```
+
+
+# 10. Which model works better for this data?
+
+The probit model performs the best for this data, with specificity, sensitivity, and accuracy slightly higher on the validation set than the logistic link model. The identity model fails to find the correct starting values.
+
+# 11. If you have grouped data, use the methods for contingency tables to analyze the data (Chi sq test, G^2, and so on if applicable).
+
+Data is ungrouped - not applicable
+
+# 12. Write a report
+
+See accompanying document.
